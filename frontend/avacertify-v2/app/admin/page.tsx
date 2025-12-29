@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, CheckCircle } from "lucide-react";
+import { Loader2, Upload, CheckCircle, Download } from "lucide-react";
 import { certificateService, Certificate } from "@/utils/blockchain";
 import { IPFSService } from "@/utils/ipfsService";
 import { CERTIFICATE_SYSTEM_ADDRESS, NFT_CERTIFICATE_ADDRESS, AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
@@ -24,6 +24,15 @@ interface WalletState {
     address: string | null;
     isConnecting: boolean;
     isConnected: boolean;
+}
+
+interface BulkCertificate {
+    studentName: string;
+    email: string;
+    cohort: string;
+    courseTitle?: string;
+    certificateId?: string;
+    address?: string;
 }
 
 export default function AdminPage() {
@@ -50,8 +59,18 @@ export default function AdminPage() {
         logoUrl: "",
         brandColor: "#FFFFFF",
     });
+    const [bulkData, setBulkData] = useState("");
+    const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+    const [bulkResults, setBulkResults] = useState<BulkCertificate[]>([]);
     const { toast } = useToast();
-    const ipfsService = new IPFSService();
+    const ipfsService = (() => {
+        try {
+            return new IPFSService();
+        } catch (error) {
+            console.warn("IPFS service not available:", error);
+            return null;
+        }
+    })();
 
     useEffect(() => {
         const checkExistingConnection = async () => {
@@ -135,6 +154,15 @@ export default function AdminPage() {
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+
+        if (!ipfsService) {
+            toast({
+                title: "IPFS Not Configured",
+                description: "Please add Pinata API credentials to .env.local to enable file uploads",
+                variant: "destructive",
+            });
+            return;
+        }
 
         const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
         const maxSize = 5 * 1024 * 1024; // 5MB
@@ -273,6 +301,9 @@ export default function AdminPage() {
 
             let certificateId: string;
             if (isNFT) {
+                if (!ipfsService) {
+                    throw new Error("IPFS service not configured. Please add Pinata credentials to issue NFT certificates.");
+                }
                 const metadata = ipfsService.generateMetadata(
                     formData.certificateType,
                     "Certificate issued by AvaCertify",
@@ -351,6 +382,157 @@ export default function AdminPage() {
         } finally {
             setIsIssuing(false);
         }
+    };
+
+    const parseBulkData = (data: string): BulkCertificate[] => {
+        const lines = data.trim().split('\n').filter(line => line.trim());
+        return lines.map(line => {
+            const parts = line.split(',').map(part => part.trim());
+            return {
+                studentName: parts[0] || '',
+                email: parts[1] || '',
+                cohort: parts[2] || '',
+                courseTitle: parts[3] || 'AvaCertify Professional Certificate'
+            };
+        }).filter(cert => cert.studentName && cert.email && cert.cohort);
+    };
+
+    const generateRandomAddress = (): string => {
+        // Generate a random Ethereum address for demo purposes
+        const randomBytes = ethers.randomBytes(20);
+        return ethers.getAddress(ethers.hexlify(randomBytes));
+    };
+
+    const handleBulkGeneration = async () => {
+        if (!walletState.isConnected) {
+            toast({
+                title: "Wallet Not Connected",
+                description: "Please connect your wallet before generating certificates",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!bulkData.trim()) {
+            toast({
+                title: "No Data Provided",
+                description: "Please enter student data in CSV format",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        const certificates = parseBulkData(bulkData);
+        if (certificates.length === 0) {
+            toast({
+                title: "Invalid Data Format",
+                description: "Please check your CSV format. Required: Name, Email, Cohort",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setIsBulkGenerating(true);
+        const results: BulkCertificate[] = [];
+        const errors: string[] = [];
+
+        try {
+            await checkNetwork();
+            
+            for (let i = 0; i < certificates.length; i++) {
+                const cert = certificates[i];
+                try {
+                    // Generate a random address for demo purposes
+                    // In production, you'd want to collect actual wallet addresses
+                    const recipientAddress = generateRandomAddress();
+                    
+                    toast({
+                        title: "Processing Certificate",
+                        description: `Generating certificate ${i + 1} of ${certificates.length} for ${cert.studentName}`,
+                    });
+
+                    const certificateId = await certificateService.issueCertificate(
+                        cert.studentName, 
+                        recipientAddress
+                    );
+
+                    if (certificateId) {
+                        const newCertificate: Certificate = {
+                            id: certificateId,
+                            certificateId,
+                            recipientName: cert.studentName,
+                            recipientAddress,
+                            certificateType: cert.courseTitle || 'AvaCertify Professional Certificate',
+                            issueDate: new Date().toISOString().split('T')[0],
+                            institutionName: formData.institutionName,
+                            status: "active",
+                            isNFT: false,
+                        };
+
+                        // Store in localStorage
+                        const storedCertificates = JSON.parse(localStorage.getItem("certificates") || "[]") as Certificate[];
+                        storedCertificates.push(newCertificate);
+                        localStorage.setItem("certificates", JSON.stringify(storedCertificates));
+
+                        // Store in dadaDevsCertificates for the dashboard bonus feature
+                        const dadaCerts = JSON.parse(localStorage.getItem("dadaDevsCertificates") || "{}");
+                        dadaCerts[certificateId] = {
+                            studentName: cert.studentName,
+                            cohort: cert.cohort,
+                            courseTitle: cert.courseTitle,
+                            email: cert.email,
+                            issueDate: new Date().toISOString(),
+                            certificateId
+                        };
+                        localStorage.setItem("dadaDevsCertificates", JSON.stringify(dadaCerts));
+
+                        results.push({
+                            ...cert,
+                            certificateId,
+                            address: recipientAddress
+                        });
+                    }
+                } catch (error: any) {
+                    console.error(`Error generating certificate for ${cert.studentName}:`, error);
+                    errors.push(`${cert.studentName}: ${error.message || 'Unknown error'}`);
+                }
+            }
+
+            setBulkResults(results);
+
+            if (results.length > 0) {
+                toast({
+                    title: "Bulk Generation Complete",
+                    description: `Successfully generated ${results.length} certificates${errors.length > 0 ? ` (${errors.length} failed)` : ''}`,
+                });
+            }
+
+            if (errors.length > 0) {
+                toast({
+                    title: "Some Certificates Failed",
+                    description: `${errors.length} certificates failed to generate. Check console for details.`,
+                    variant: "destructive",
+                });
+            }
+
+        } catch (error: any) {
+            toast({
+                title: "Bulk Generation Failed",
+                description: error.message || "Failed to generate certificates",
+                variant: "destructive",
+            });
+        } finally {
+            setIsBulkGenerating(false);
+        }
+    };
+
+    const downloadAllPDFs = () => {
+        // This is a placeholder function for PDF download functionality
+        // In a real implementation, you would generate and download PDF certificates
+        toast({
+            title: "PDF Download",
+            description: "PDF download functionality would be implemented here. For now, certificates are stored in blockchain and localStorage.",
+        });
     };
 
     return (
@@ -445,14 +627,23 @@ export default function AdminPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="document">Certificate Document (Optional)</Label>
+                                    <Label htmlFor="document">Certificate Document (Optional - Requires IPFS Setup)</Label>
                                     <Input
                                         id="document"
                                         type="file"
                                         accept="application/pdf,image/*"
                                         onChange={handleFileUpload}
-                                        disabled={uploadState.isUploading}
+                                        disabled={uploadState.isUploading || !ipfsService}
                                     />
+                                    {!ipfsService ? (
+                                        <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border">
+                                            ⚠️ IPFS not configured. Add Pinata API credentials to .env.local to enable file uploads.
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            File upload enabled via Pinata IPFS. You can issue certificates without uploading documents.
+                                        </p>
+                                    )}
                                     {uploadState.isUploading && (
                                         <div className="flex items-center mt-2">
                                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -532,6 +723,95 @@ export default function AdminPage() {
                                     )}
                                 </Button>
                             </form>
+                        </CardContent>
+                    </Card>
+
+                    {/* Bulk Certificate Generation Feature */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle> Bulk Certificate Generation</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Generate multiple AvaCertify certificates at once using CSV format. Perfect for graduating cohorts or completing courses.
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <h4 className="font-medium text-blue-800 mb-1"> How it works:</h4>
+                                    <ul className="text-sm text-blue-700 space-y-1">
+                                        <li>• Enter recipient data in CSV format </li>
+                                        <li>• Certificates are issued on Avalanche Fuji testnet</li>
+                                        <li>• Results are stored in both blockchain and local storage</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="bulkData">Example: Student Data CSV Format</Label>
+                                    <textarea
+                                        id="bulkData"
+                                        className="w-full h-32 p-3 border rounded-md text-sm font-mono"
+                                        value={bulkData}
+                                        onChange={(e) => setBulkData(e.target.value)}
+                                        placeholder="Name, Email, Cohort, Course Title (optional)
+Jane Doe, jane@example.com, Cohort 1, Blockchain Development
+John Smith, john@example.com, Cohort 1, Smart Contract Development  
+Alice Johnson, alice@example.com, Cohort 1, DeFi Fundamentals
+Bob Wilson, bob@example.com, Cohort 1"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Format: Name, Email, Cohort, Course Title (one per line)
+                                    </p>
+                                </div>
+
+                                <Button
+                                    onClick={handleBulkGeneration}
+                                    disabled={isBulkGenerating || !walletState.isConnected}
+                                    className="w-full"
+                                    variant="outline"
+                                >
+                                    {isBulkGenerating ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Generating Bulk Certificates...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="mr-2 h-4 w-4" />
+                                            Generate Bulk Certificates
+                                        </>
+                                    )}
+                                </Button>
+
+                                {bulkResults.length > 0 && (
+                                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                        <h4 className="font-semibold text-green-800 mb-2">
+                                            ✅ Bulk Generation Complete: {bulkResults.length} certificates
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {bulkResults.map((cert: BulkCertificate, index: number) => (
+                                                <div key={index} className="text-sm text-green-700">
+                                                    • {cert.studentName} ({cert.cohort}) - ID: {cert.certificateId}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Button
+                                            onClick={downloadAllPDFs}
+                                            className="w-full mt-3"
+                                            size="sm"
+                                        >
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Download All PDFs
+                                        </Button>
+                                        <Button
+                                            onClick={() => setBulkResults([])}
+                                            variant="outline"
+                                            className="w-full mt-2"
+                                            size="sm"
+                                        >
+                                            Clear Results
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
