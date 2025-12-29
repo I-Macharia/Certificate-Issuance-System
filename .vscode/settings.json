@@ -3,5 +3,6 @@
         "avacertify",
         "IPFS",
         "Waitlisted"
-    ]
+    ],
+    "kiroAgent.configureMCP": "Disabled"
 }
