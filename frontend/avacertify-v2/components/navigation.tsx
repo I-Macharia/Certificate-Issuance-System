@@ -92,7 +92,8 @@ export function Navigation() {
             </Button>
           </motion.div>
           <ThemeToggle />
-          <WalletConnect />
+          {/* Hide WalletConnect on admin page */}
+          {pathname !== "/admin" && <WalletConnect />}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden">
@@ -115,9 +116,12 @@ export function Navigation() {
                     <span>{item.name}</span>
                   </Link>
                 ))}
-                <Button variant="default" onClick={handleConnect}>
-                  Connect Wallet
-                </Button>
+                {/* Hide Connect Wallet button in mobile menu on admin page */}
+                {pathname !== "/admin" && (
+                  <Button variant="default" onClick={handleConnect}>
+                    Connect Wallet
+                  </Button>
+                )}
               </div>
             </SheetContent>
           </Sheet>
