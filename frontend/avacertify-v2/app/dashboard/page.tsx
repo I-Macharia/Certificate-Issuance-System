@@ -19,6 +19,13 @@ import { ethers } from "ethers";
 
 const MotionDiv = dynamic(() => import("framer-motion").then((mod) => mod.motion.div), { ssr: false });
 
+/**
+ * Dashboard component for certificate issuance and management.
+ * Provides UI and logic for issuing new certificates, viewing issued certificates, and managing organization registration.
+ *
+ * Handles user interactions for certificate creation, file uploads to IPFS, and displays certificate details.
+ * Manages blockchain connectivity, organization registration, and certificate state.
+ */
 export default function Dashboard() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
@@ -45,7 +52,14 @@ export default function Dashboard() {
     brandColor: "#FFFFFF",
   });
   const { toast } = useToast();
+  const ipfsService = new IPFSService();
 
+  /**
+   * Checks if the connected blockchain network matches the required Avalanche Fuji Testnet.
+   * Ensures that certificate operations are performed on the correct network.
+   *
+   * Throws an error if the user is not connected to the Avalanche Fuji Testnet.
+   */
   const checkNetwork = useCallback(async () => {
     const network = await certificateService.getNetwork();
     if (!network || network.chainId !== BigInt(parseInt(AVALANCHE_FUJI_CONFIG.chainId, 16))) {
@@ -53,6 +67,12 @@ export default function Dashboard() {
     }
   }, []);
 
+  /**
+   * Fetches issued certificates from local storage and updates them with blockchain data.
+   * Synchronizes certificate state between local storage and the blockchain.
+   *
+   * Displays an error toast if fetching certificates fails.
+   */
   const fetchCertificates = useCallback(async () => {
     try {
       await checkNetwork();
@@ -66,7 +86,7 @@ export default function Dashboard() {
       }
       setCertificates(blockchainCertificates);
       localStorage.setItem("certificates", JSON.stringify(blockchainCertificates));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to fetch certificates:", error);
       toast({
         title: "Error",
@@ -92,7 +112,7 @@ export default function Dashboard() {
           });
           fetchCertificates();
         }
-      } catch (error) {
+      } catch (error: unknown) {
         setIsConnected(false);
         toast({
           title: "Connection Error",
@@ -104,6 +124,12 @@ export default function Dashboard() {
     initBlockchain();
   }, [toast, fetchCertificates, checkNetwork]);
 
+  /**
+   * Handles uploading a certificate document to IPFS and updates upload state.
+   * Validates file type and size before uploading, and provides user feedback via toasts.
+   *
+   * Updates the document and metadata hashes in the component state after successful upload.
+   */
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -165,11 +191,11 @@ export default function Dashboard() {
         title: "File Uploaded",
         description: "Document and metadata successfully uploaded to IPFS",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setUploadState((prev) => ({ ...prev, isUploading: false }));
       toast({
         title: "Upload Failed",
-        description: error.message || "Failed to upload file to IPFS. This feature is optional.",
+        description: error instanceof Error ? error.message : "Failed to upload file to IPFS",
         variant: "destructive",
       });
       // Clear the file input
@@ -178,10 +204,24 @@ export default function Dashboard() {
     }
   };
 
+  /**
+   * Updates the form data state for certificate issuance.
+   * Allows controlled input fields to update their corresponding values.
+   *
+   * Args:
+   *   field: The name of the form field to update.
+   *   value: The new value for the specified field.
+   */
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  /**
+   * Registers the organization for NFT certificate issuance.
+   * Validates required fields and provides user feedback on registration status.
+   *
+   * Displays a toast notification for success or failure.
+   */
   const handleRegisterOrganization = async () => {
     if (!formData.logoUrl || !formData.brandColor) {
       toast({
@@ -199,15 +239,23 @@ export default function Dashboard() {
         title: "Organization Registered",
         description: "Successfully registered organization for NFT certificates",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Registration Failed",
-        description: error.message || "Failed to register organization",
+        description: error instanceof Error ? error.message : "Failed to register organization",
         variant: "destructive",
       });
     }
   };
 
+  /**
+   * Copies the specified text to the clipboard and shows a confirmation toast.
+   * Used for copying certificate details such as IDs and addresses.
+   *
+   * Args:
+   *   text: The text to copy to the clipboard.
+   *   label: A label describing the copied content for user feedback.
+   */
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -216,20 +264,13 @@ export default function Dashboard() {
     });
   };
 
-  const isFormValid = () => {
-    const { recipientName, recipientAddress, certificateType, issueDate, institutionName } = formData;
-    
-    if (!recipientName || !recipientAddress || !certificateType || !issueDate || !institutionName) {
-      return false;
-    }
-
-    if (isNFT && !isRegistered) {
-      return false;
-    }
-
-    return true;
-  };
-
+  /**
+   * Handles the issuance of a new certificate or NFT certificate.
+   * Validates form data, interacts with blockchain and IPFS, and updates certificate state.
+   *
+   * Args:
+   *   event: The form submission event.
+   */
   const handleIssueCertificate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isConnected) {
@@ -337,25 +378,31 @@ export default function Dashboard() {
         documentUrl: "",
       });
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
-    } catch (error: any) {
+      if (fileInput) {
+        fileInput.value = "";
+      }
+    } catch (error: unknown) {
       let message = isNFT ? "Failed to mint NFT certificate" : "Failed to issue certificate";
-      if (error.code === 4001 || error.code === "ACTION_REJECTED") {
-        message = "User rejected the transaction";
-      } else if (error.message?.includes("insufficient funds")) {
-        message = "Insufficient AVAX for gas fees. Get test AVAX from faucet.";
-      } else if (error.message?.includes("network")) {
-        message = "Please ensure you're connected to the Avalanche Fuji Testnet";
-      } else if (error.message?.includes("not authorized") || error.message?.includes("ISSUER_ROLE")) {
-        message = "Wallet not authorized to issue certificates. Contact admin.";
-      } else if (error.message?.includes("not registered")) {
-        message = "Organization not registered. Please register first.";
-      } else if (error.message?.includes("CALL_EXCEPTION")) {
-        message = "Transaction failed: Likely unauthorized issuer or invalid parameters.";
+      if (error instanceof Error) {
+        if (error.message.includes("4001") || error.message.includes("ACTION_REJECTED")) {
+          message = "User rejected the transaction";
+        } else if (error.message.includes("insufficient funds")) {
+          message = "Insufficient AVAX for gas fees. Get test AVAX from faucet.";
+        } else if (error.message.includes("network")) {
+          message = "Please ensure you're connected to the Avalanche Fuji Testnet";
+        } else if (error.message.includes("not authorized") || error.message.includes("ISSUER_ROLE")) {
+          message = "Wallet not authorized to issue certificates. Contact admin.";
+        } else if (error.message.includes("not registered")) {
+          message = "Organization not registered. Please register first.";
+        } else if (error.message.includes("CALL_EXCEPTION")) {
+          message = "Transaction failed: Likely unauthorized issuer or invalid parameters.";
+        } else {
+          message = error.message;
+        }
       }
       toast({
         title: "Error",
-        description: error.message || message,
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -363,6 +410,51 @@ export default function Dashboard() {
     }
   };
 
+  function isFormValid(): boolean {
+    const { recipientName, recipientAddress, certificateType, issueDate, institutionName, expirationDate } = formData;
+
+    // Required fields
+    if (!recipientName || !recipientAddress || !certificateType || !issueDate || !institutionName) {
+      return false;
+    }
+
+    // Basic length constraint
+    if (recipientName.length > 100) {
+      return false;
+    }
+
+    // Validate Ethereum address format
+    if (!ethers.isAddress(recipientAddress)) {
+      return false;
+    }
+
+    // If a file is still uploading, form is not valid for submit
+    if (uploadState.isUploading) {
+      return false;
+    }
+
+    // If an expiration date is provided, it must be after the issue date
+    if (expirationDate) {
+      try {
+        const issue = new Date(issueDate);
+        const exp = new Date(expirationDate);
+        if (isNaN(issue.getTime()) || isNaN(exp.getTime()) || exp <= issue) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    // Additional checks for NFT issuance
+    if (isNFT) {
+      // Organization must be registered and branding provided to mint NFTs
+      if (!isRegistered) return false;
+      if (!formData.logoUrl || !formData.brandColor) return false;
+    }
+
+    return true;
+  }
   return (
     <Layout>
       <div className="container py-10">
