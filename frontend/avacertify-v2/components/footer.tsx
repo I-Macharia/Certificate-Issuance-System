@@ -86,8 +86,6 @@ export function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2 rounded-full bg-foreground/5 hover:bg-primary/10 hover:text-primary transition-colors"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
                 >
                   <social.icon className="h-5 w-5" />
                   <span className="sr-only">{social.name}</span>
