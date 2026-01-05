@@ -39,9 +39,6 @@ export default function Contact() {
           <h1 className="text-4xl font-bold mb-6">Contact Us</h1>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
             >
               <Card>
                 <CardHeader>
@@ -69,9 +66,6 @@ export default function Contact() {
               </Card>
             </motion.div>
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
               className="space-y-6"
             >
               <Card>
