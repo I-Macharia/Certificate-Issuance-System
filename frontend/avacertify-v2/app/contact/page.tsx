@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { MotionDiv } from '@/components/MotionDiv'  
+
 
 // Dynamic imports for icons
 const Mail = dynamic(() => import('lucide-react').then(mod => mod.Mail))
@@ -29,7 +29,7 @@ export default function Contact() {
 
   return (
     <Layout>
-      <MotionDiv
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -121,7 +121,7 @@ export default function Contact() {
             </motion.div>
           </div>
         </div>
-      </MotionDiv>
+      </motion.div>
     </Layout>
   )
 }
