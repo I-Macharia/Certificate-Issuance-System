@@ -30,8 +30,6 @@ export default function Documentation() {
         <motion.section
           id="problem-statement"
           className="mb-16"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
         >
           <h2 className="text-2xl font-bold mb-6">Problem Statement</h2>
@@ -53,8 +51,6 @@ export default function Documentation() {
         <motion.section
           id="technical-architecture"
           className="mb-16"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
         >
           <h2 className="text-2xl font-bold mb-6">Technical Architecture</h2>
