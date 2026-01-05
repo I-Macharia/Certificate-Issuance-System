@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import MotionDiv from '@/components/MotionDiv'
+import { MotionDiv } from '@/components/MotionDiv'  
 import type React from "react" 
 
 // Use typed MotionDiv wrapper component
