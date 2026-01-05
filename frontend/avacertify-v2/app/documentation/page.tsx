@@ -27,14 +27,10 @@ export default function Documentation() {
           </Card>
         </section>
 
-        <motion.section
-          id="technical-architecture"
+        <section
+          id="problem-statement"
           className="mb-16"
-          initial={fadeInUp.initial}
-          animate={fadeInUp.animate}
-          transition={fadeInUp.transition}
         >
-
           <h2 className="text-2xl font-bold mb-6">Problem Statement</h2>
           <div className="space-y-4">
             <Card>
@@ -49,15 +45,11 @@ export default function Documentation() {
               </CardContent>
             </Card>
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section
+        <section
           id="technical-architecture"
           className="mb-16"
-          viewport={{ once: true }}
-          initial={fadeInUp.initial}
-          animate={fadeInUp.animate}
-          transition={fadeInUp.transition}
         >
           <h2 className="text-2xl font-bold mb-6">Technical Architecture</h2>
           <Tabs defaultValue="smart-contracts">
@@ -129,7 +121,7 @@ contract AvaCertify is ERC721URIStorage, Ownable {
               </Card>
             </TabsContent>
           </Tabs>
-        </motion.section>
+        </section>
 
         {/* Additional sections continue with similar structure */}
       </motion.div>
