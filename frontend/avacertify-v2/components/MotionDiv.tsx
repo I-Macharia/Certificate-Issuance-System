@@ -3,9 +3,11 @@
 import React from "react";
 import { motion, HTMLMotionProps } from "framer-motion";
 
-// Small typed wrapper around framer-motion's motion.div to avoid unsafe casts
-// Accepts all HTMLMotionProps<'div'> including animation props like initial/animate
-export const MotionDiv = React.forwardRef<HTMLDivElement, HTMLMotionProps<"div">>((props, ref) => {
+// Properly typed wrapper around framer-motion's motion.div
+// This ensures all animation props are correctly typed
+type MotionDivProps = HTMLMotionProps<"div">
+
+export const MotionDiv = React.forwardRef<HTMLDivElement, MotionDivProps>((props, ref) => {
   return <motion.div ref={ref} {...props} />;
 });
 
