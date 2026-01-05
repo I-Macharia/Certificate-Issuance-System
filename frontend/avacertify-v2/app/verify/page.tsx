@@ -108,9 +108,6 @@ export default function Verify() {
   return (
     <Layout>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
         className="container py-10"
       >
         <h1 className="text-3xl font-bold mb-6">Verify Certificate</h1>
@@ -185,10 +182,6 @@ export default function Verify() {
               {verificationStatus !== "idle" && verificationStatus !== "loading" && (
                 <motion.div
                   key={verificationStatus}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
                   className="mt-6"
                 >
                   {verificationStatus === "valid" && certificate && (

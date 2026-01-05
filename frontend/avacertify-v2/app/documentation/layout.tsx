@@ -93,9 +93,6 @@ export default function DocLayout({ children }: { children: React.ReactNode }) {
     <Layout>
       <div className="flex min-h-screen">
         <motion.aside
-          initial={{ x: -300, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
           className="w-64 border-r bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 hidden md:block"
         >
           <div className="sticky top-0 p-4 space-y-4 h-screen overflow-y-auto">

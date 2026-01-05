@@ -55,7 +55,7 @@ export default function AdminPage() {
         recipientName: "",
         certificateType: "",
         issueDate: "",
-        institutionName: "AvaCertify",
+        institutionName: "",
         logoUrl: "",
         brandColor: "#FFFFFF",
     });
@@ -353,7 +353,7 @@ export default function AdminPage() {
                 recipientName: "",
                 certificateType: "",
                 issueDate: "",
-                institutionName: "AvaCertify",
+                institutionName: "",
                 logoUrl: "",
                 brandColor: "#FFFFFF",
             });
