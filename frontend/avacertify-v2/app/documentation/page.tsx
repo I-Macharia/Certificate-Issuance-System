@@ -31,7 +31,7 @@ export default function Documentation() {
           id="problem-statement"
           className="mb-16"
           viewport={{ once: true }}
-        >
+        > 
           <h2 className="text-2xl font-bold mb-6">Problem Statement</h2>
           <div className="space-y-4">
             <Card>
