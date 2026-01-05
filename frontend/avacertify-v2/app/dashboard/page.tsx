@@ -10,14 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FileText, Copy, ExternalLink, Loader2, Upload, CheckCircle } from "lucide-react";
-// dynamic import removed; using MotionDiv component
+// dynamic import removed; using motion.dev component
 import { useToast } from "@/hooks/use-toast";
 import { Certificate, certificateService } from "@/utils/blockchain";
 import { IPFSService, IPFSServiceInterface } from "@/utils/ipfsService";
 import { AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
 import { ethers } from "ethers";
+import { motion } from 'framer-motion'
 
-import MotionDiv from "@/components/MotionDiv";
 
 /**
  * Dashboard component for certificate issuance and management.
@@ -647,7 +647,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="space-y-4">
                     {certificates.map((cert) => (
-                      <MotionDiv
+                      <motion.div
                         key={cert.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -675,7 +675,7 @@ export default function Dashboard() {
                             </div>
                           </CardContent>
                         </Card>
-                      </MotionDiv>
+                      </motion.div>
                     ))}
                   </div>
                 )}
