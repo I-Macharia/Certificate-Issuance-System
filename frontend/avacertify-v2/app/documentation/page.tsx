@@ -28,10 +28,13 @@ export default function Documentation() {
         </section>
 
         <motion.section
-          id="problem-statement"
+          id="technical-architecture"
           className="mb-16"
-          viewport={{ once: true }}
-        > 
+          initial={fadeInUp.initial}
+          animate={fadeInUp.animate}
+          transition={fadeInUp.transition}
+        >
+
           <h2 className="text-2xl font-bold mb-6">Problem Statement</h2>
           <div className="space-y-4">
             <Card>
@@ -52,6 +55,9 @@ export default function Documentation() {
           id="technical-architecture"
           className="mb-16"
           viewport={{ once: true }}
+          initial={fadeInUp.initial}
+          animate={fadeInUp.animate}
+          transition={fadeInUp.transition}
         >
           <h2 className="text-2xl font-bold mb-6">Technical Architecture</h2>
           <Tabs defaultValue="smart-contracts">
