@@ -30,9 +30,6 @@ export default function Contact() {
   return (
     <Layout>
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
         className="container py-10"
       >
         <div className="max-w-5xl mx-auto">
