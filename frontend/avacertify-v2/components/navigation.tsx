@@ -40,7 +40,7 @@ export function Navigation() {
         <div className="flex items-center space-x-4">
           <Link href="/" className="flex items-center space-x-2">
             <motion.img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Avacerify%20logo-3L4whQx9hWLHOgiWk6KoYufLDWSfgE.webp"
+              src="https://coral-quick-ocelot-667.mypinata.cloud/ipfs/bafkreifllc47c5kvztujlo34rxlhov23pqpwcaf2tw7rojxexmv47pqlku"
               alt="AvaCertify Logo"
               className="h-8 w-8"
             />
