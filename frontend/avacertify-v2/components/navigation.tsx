@@ -34,8 +34,6 @@ export function Navigation() {
 
   return (
     <motion.header
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
       className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
       <div className="container flex h-16 items-center justify-between">
@@ -45,8 +43,6 @@ export function Navigation() {
               src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Avacerify%20logo-3L4whQx9hWLHOgiWk6KoYufLDWSfgE.webp"
               alt="AvaCertify Logo"
               className="h-8 w-8"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
             />
             <span className="font-bold text-xl bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">AvaCertify</span>
           </Link>
@@ -72,8 +68,6 @@ export function Navigation() {
         <div className="flex items-center space-x-4">
   {/* Notification Button - Hidden on small screens */}
   <motion.div
-    whileHover={{ scale: 1.05 }}
-    whileTap={{ scale: 0.95 }}
     className="hidden md:block" // Hide on small screens, show on medium and larger screens
 >
             <Button
