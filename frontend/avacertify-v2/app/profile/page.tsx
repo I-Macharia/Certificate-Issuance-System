@@ -54,7 +54,7 @@ export default function ProfilePage() {
   return (
     <Layout>
       <div className="container py-10">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <motion.div>
           <h1 className="text-3xl font-bold mb-6">Profile</h1>
           <Tabs defaultValue="info" className="space-y-6">
             <TabsList>
@@ -99,9 +99,6 @@ export default function ProfilePage() {
                 {certificates.map((cert) => (
                   <motion.div
                     key={cert.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
                   >
                     <Card>
                       <CardContent className="p-6">
