@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import MotionDiv from '@/components/MotionDiv'
-import type React from "react" // Added import for React
+import type React from "react" 
 
 // Use typed MotionDiv wrapper component
 
