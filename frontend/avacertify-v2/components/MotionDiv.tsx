@@ -1,12 +1,10 @@
 "use client"
 
 import React from "react";
-import { motion, HTMLMotionProps } from "framer-motion";
+import { motion } from "framer-motion";
 
-// Properly typed wrapper with explicit children prop
-type MotionDivProps = HTMLMotionProps<"div"> & {
-  children?: React.ReactNode;
-}
+// Use ComponentPropsWithoutRef to ensure all motion and HTML props are inherited
+type MotionDivProps = React.ComponentPropsWithoutRef<typeof motion.div>;
 
 export const MotionDiv = React.forwardRef<HTMLDivElement, MotionDivProps>((props, ref) => {
   return <motion.div ref={ref} {...props} />;

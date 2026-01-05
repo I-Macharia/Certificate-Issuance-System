@@ -8,8 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { MotionDiv } from '@/components/MotionDiv'  // Changed: Named import instead of default
-import type React from "react" 
+import { MotionDiv } from '@/components/MotionDiv'  
 
 // Dynamic imports for icons
 const Mail = dynamic(() => import('lucide-react').then(mod => mod.Mail))
