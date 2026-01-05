@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FileText, Copy, ExternalLink, Loader2, Upload, CheckCircle } from "lucide-react";
-// dynamic import removed; using motion.dev component
 import { useToast } from "@/hooks/use-toast";
 import { Certificate, certificateService } from "@/utils/blockchain";
 import { IPFSService, IPFSServiceInterface } from "@/utils/ipfsService";
@@ -47,7 +46,7 @@ export default function Dashboard() {
     issueDate: "",
     expirationDate: "",
     additionalDetails: "",
-    institutionName: "AvaCertify",
+    institutionName: "",
     logoUrl: "",
     brandColor: "#FFFFFF",
   });
@@ -367,7 +366,7 @@ export default function Dashboard() {
         issueDate: "",
         expirationDate: "",
         additionalDetails: "",
-        institutionName: "AvaCertify",
+        institutionName: "",
         logoUrl: "",
         brandColor: "#FFFFFF",
       });
@@ -649,9 +648,6 @@ export default function Dashboard() {
                     {certificates.map((cert) => (
                       <motion.div
                         key={cert.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
                       >
                         <Card
                           className="cursor-pointer hover:bg-accent"
