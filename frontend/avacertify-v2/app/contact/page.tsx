@@ -7,12 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from 'framer-motion'
-import type { HTMLMotionProps } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import MotionDiv from '@/components/MotionDiv'
 import type React from "react" // Added import for React
 
-// Typed alias for motion.div to satisfy TypeScript
-const MotionDiv = motion.div as unknown as React.ComponentType<HTMLMotionProps<'div'>>
+// Use typed MotionDiv wrapper component
 
 // Dynamic imports for icons
 const Mail = dynamic(() => import('lucide-react').then(mod => mod.Mail))

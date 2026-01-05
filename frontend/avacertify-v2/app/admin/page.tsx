@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, CheckCircle, Download } from "lucide-react";
 import { certificateService, Certificate } from "@/utils/blockchain";
-import { IPFSService } from "@/utils/ipfsService";
+import { IPFSService, IPFSServiceInterface } from "@/utils/ipfsService";
 import { CERTIFICATE_SYSTEM_ADDRESS, NFT_CERTIFICATE_ADDRESS, AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
 import { ethers } from "ethers";
 
@@ -63,7 +63,7 @@ export default function AdminPage() {
     const [isBulkGenerating, setIsBulkGenerating] = useState(false);
     const [bulkResults, setBulkResults] = useState<BulkCertificate[]>([]);
     const { toast } = useToast();
-    const ipfsService = (() => {
+    const ipfsService: IPFSServiceInterface | null = (() => {
         try {
             return new IPFSService();
         } catch (error) {

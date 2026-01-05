@@ -10,14 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FileText, Copy, ExternalLink, Loader2, Upload, CheckCircle } from "lucide-react";
-import dynamic from "next/dynamic";
+// dynamic import removed; using MotionDiv component
 import { useToast } from "@/hooks/use-toast";
 import { Certificate, certificateService } from "@/utils/blockchain";
-import { IPFSService } from "@/utils/ipfsService";
+import { IPFSService, IPFSServiceInterface } from "@/utils/ipfsService";
 import { AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
 import { ethers } from "ethers";
 
-const MotionDiv = dynamic(() => import("framer-motion").then((mod) => mod.motion.div), { ssr: false });
+import MotionDiv from "@/components/MotionDiv";
 
 /**
  * Dashboard component for certificate issuance and management.
@@ -52,7 +52,7 @@ export default function Dashboard() {
     brandColor: "#FFFFFF",
   });
   const { toast } = useToast();
-  const _ipfsService = new IPFSService();
+  const _ipfsService: IPFSServiceInterface = new IPFSService();
 
   /**
    * Checks if the connected blockchain network matches the required Avalanche Fuji Testnet.
@@ -165,10 +165,8 @@ export default function Dashboard() {
         throw new Error("IPFS upload not configured. Please add Pinata credentials to continue.");
       }
       
-  // Only instantiate IPFSService when actually needed
-  // Use unknown and narrow to the methods we need to avoid `any`
-  const _ipfs = new IPFSService() as unknown;
-  const ipfsService = _ipfs as IPFSService;
+  // Instantiate IPFS service with explicit interface type
+  const ipfsService: IPFSServiceInterface = new IPFSService();
       
       const documentHash = await ipfsService.uploadFile(file);
       const documentUrl = ipfsService.getGatewayUrl(documentHash);
