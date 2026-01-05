@@ -19,9 +19,8 @@ module.exports = {
   extends: [
     "next/core-web-vitals",
     "plugin:@typescript-eslint/recommended",
-    "plugin:react-hooks/recommended",
   ],
-  plugins: ["@typescript-eslint", "react", "react-hooks"],
+  plugins: ["@typescript-eslint", "react"],
   rules: {
     "@typescript-eslint/no-unused-vars": ["error", {
       "caughtErrorsIgnorePattern": "^_",

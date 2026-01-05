@@ -6,9 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { motion } from "framer-motion"
+import { motion } from 'framer-motion'
+import type { HTMLMotionProps } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import type React from "react" // Added import for React
+
+// Typed alias for motion.div to satisfy TypeScript
+const MotionDiv = motion.div as unknown as React.ComponentType<HTMLMotionProps<'div'>>
 
 // Dynamic imports for icons
 const Mail = dynamic(() => import('lucide-react').then(mod => mod.Mail))
@@ -29,8 +33,8 @@ export default function Contact() {
 
   return (
     <Layout>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
+      <MotionDiv
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="container py-10"
@@ -121,7 +125,7 @@ export default function Contact() {
             </motion.div>
           </div>
         </div>
-      </motion.div>
+      </MotionDiv>
     </Layout>
   )
 }

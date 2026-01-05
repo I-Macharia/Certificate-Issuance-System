@@ -500,9 +500,10 @@ export default function AdminPage() {
                             address: recipientAddress
                         });
                     }
-                } catch (error: any) {
+                } catch (error: unknown) {
                     console.error(`Error generating certificate for ${cert.studentName}:`, error);
-                    errors.push(`${cert.studentName}: ${error.message || 'Unknown error'}`);
+                    const msg = error instanceof Error ? error.message : String(error);
+                    errors.push(`${cert.studentName}: ${msg || 'Unknown error'}`);
                 }
             }
 
@@ -523,10 +524,11 @@ export default function AdminPage() {
                 });
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             toast({
                 title: "Bulk Generation Failed",
-                description: error.message || "Failed to generate certificates",
+                description: msg || "Failed to generate certificates",
                 variant: "destructive",
             });
         } finally {

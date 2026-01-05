@@ -166,7 +166,9 @@ export default function Dashboard() {
       }
       
   // Only instantiate IPFSService when actually needed
-  const ipfsService = new IPFSService() as any;
+  // Use unknown and narrow to the methods we need to avoid `any`
+  const _ipfs = new IPFSService() as unknown;
+  const ipfsService = _ipfs as IPFSService;
       
       const documentHash = await ipfsService.uploadFile(file);
       const documentUrl = ipfsService.getGatewayUrl(documentHash);
