@@ -38,7 +38,7 @@ export default function Verify() {
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>("idle")
   const [certificate, setCertificate] = useState<Certificate | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [verificationType, setVerificationType] = useState<"standard" | "nft">("standard")
+  const [_verificationType, setVerificationType] = useState<"standard" | "nft">("standard")
   const { toast } = useToast()
 
   const copyToClipboard = (text: string, label: string) => {

@@ -52,7 +52,7 @@ export default function Dashboard() {
     brandColor: "#FFFFFF",
   });
   const { toast } = useToast();
-  const ipfsService = new IPFSService();
+  const _ipfsService = new IPFSService();
 
   /**
    * Checks if the connected blockchain network matches the required Avalanche Fuji Testnet.
@@ -165,8 +165,8 @@ export default function Dashboard() {
         throw new Error("IPFS upload not configured. Please add Pinata credentials to continue.");
       }
       
-      // Only instantiate IPFSService when actually needed
-      const ipfsService = new IPFSService() as any;
+  // Only instantiate IPFSService when actually needed
+  const ipfsService = new IPFSService() as any;
       
       const documentHash = await ipfsService.uploadFile(file);
       const documentUrl = ipfsService.getGatewayUrl(documentHash);
