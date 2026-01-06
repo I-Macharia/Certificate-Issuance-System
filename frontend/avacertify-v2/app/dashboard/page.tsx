@@ -24,11 +24,11 @@ export default function Dashboard() {
   const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, _setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [connectedAddress, setConnectedAddress] = useState<string>("");
+  const [connectedAddress, _setConnectedAddress] = useState<string>("");
   const [selectedContract, setSelectedContract] = useState<"standard" | "nft" | "all">("all");
   const [showMyOnly, setShowMyOnly] = useState(false);
   const { toast } = useToast();
@@ -74,7 +74,7 @@ export default function Dashboard() {
 
       const allCertificates: Certificate[] = [];
       const BLOCK_RANGE = 2000; // Stay under 2048 limit
-      const MAX_BLOCKS_TO_SCAN = 1000000; // Scan up to 1 million blocks back
+      const MAX_BLOCKS_TO_SCAN = 1000000000; // Scan up to 1000 million blocks back
 
       const currentBlock = await provider.getBlockNumber();
       const startBlock = Math.max(0, currentBlock - MAX_BLOCKS_TO_SCAN);
