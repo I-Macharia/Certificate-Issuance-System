@@ -141,7 +141,8 @@ export class CertificateService {
 
       console.log("🔑 Getting signer...");
       this.signer = await this.provider.getSigner();
-      const signerAddress = await this.signer.getAddress();
+      const fullSignerAddress = await this.signer.getAddress();
+      const signerAddress = fullSignerAddress.slice(0, 10); // shorten for logging
       console.log("✅ Signer obtained:", signerAddress);
 
       this.contract = new ethers.Contract(
@@ -632,6 +633,64 @@ export class CertificateService {
           NFT_CERTIFICATE_ABI,
           this.provider
         ) as ethers.Contract & NFTContractMethods;
+  }
+
+  /**
+   * Get certificate details without requiring wallet connection (read-only).
+   * Used for public certificate viewing.
+   */
+  async getCertificateReadOnly(certificateId: string, isNFT: boolean = false): Promise<Certificate | null> {
+    if (!this.provider) {
+      throw new Error("Provider not initialized. Call init() first.");
+    }
+    
+    if (!certificateId?.trim()) {
+      throw new Error("Certificate ID is required");
+    }
+
+    try {
+      if (isNFT) {
+        const nftContract = await this.getReadOnlyNFTContract();
+        const owner = await nftContract.ownerOf(certificateId);
+        if (owner === ethers.ZeroAddress) {
+          return null;
+        }
+        const tokenURI = await nftContract.tokenURI(certificateId);
+        return {
+          owner,
+          id: certificateId,
+          certificateId,
+          recipientName: "NFT Certificate Holder",
+          recipientAddress: owner,
+          certificateType: "NFT Certificate",
+          issueDate: new Date().toISOString(),
+          institutionName: "AvaCertify",
+          status: "active",
+          isNFT: true,
+        };
+      } else {
+        const contract = await this.getReadOnlyContract();
+        const certificate = await contract.certificates(certificateId);
+        if (!certificate || certificate.id === 0) {
+          return null;
+        }
+        return {
+          owner: certificate.owner,
+          id: certificate.id.toString(),
+          certificateId: certificate.id.toString(),
+          recipientName: certificate.recipientName,
+          recipientAddress: certificate.owner,
+          certificateType: "Standard Certificate",
+          issueDate: new Date(Number(certificate.issueDate) * 1000).toISOString(),
+          institutionName: "AvaCertify",
+          status: certificate.isValid ? "active" : "revoked",
+          isNFT: false,
+        };
+      }
+    } catch (error: any) {
+      console.error("Error getting certificate (read-only):", error);
+      throw new Error("Failed to retrieve certificate");
+    }
   }
   
 }

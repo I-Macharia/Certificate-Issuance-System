@@ -107,7 +107,7 @@ export default function Dashboard() {
               const certificateId = event.args?.id?.toString();
               if (!certificateId) continue;
 
-                const cert = await certificateService.getCertificate(certificateId, false);
+                const cert = await certificateService.getCertificateReadOnly(certificateId, false);
                 if (cert && cert.recipientAddress !== "0x0000000000000000000000000000000000000000") {
                   allCertificates.push({
                     ...cert,
@@ -150,7 +150,7 @@ export default function Dashboard() {
                 const tokenId = event.args?.tokenId?.toString();
                 if (!tokenId) continue;
 
-                const cert = await certificateService.getCertificate(tokenId, true);
+                const cert = await certificateService.getCertificateReadOnly(tokenId, true);
                 if (cert) {
                   allCertificates.push({
                     ...cert,
@@ -217,21 +217,22 @@ export default function Dashboard() {
   useEffect(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    // Start from all certificates
-    let base = certificates;
+    //](VALID_DIRECTORY) Start from all certificates
+    let base: Certificate[] = certificates;
 
-    // Apply contract type filter first
+    //](VALID_DIRECTORY) Apply contract type filter first
     if (selectedContract === "nft") {
-      base = base.filter(c => c.isNFT);
+      base = base.filter((c: Certificate) => c.isNFT);
     } else if (selectedContract === "standard") {
-      base = base.filter(c => !c.isNFT);
+      base = base.filter((c: Certificate) => !c.isNFT);
     }
 
-    // If user requested only their certificates, further narrow by connectedAddress
+    //](VALID_DIRECTORY) If user requested only their certificates, further narrow by connectedAddress
     if (showMyOnly && connectedAddress) {
-      base = base.filter(cert => 
-        cert.recipientAddress?.toLowerCase() === connectedAddress.toLowerCase() ||
-        cert.owner?.toLowerCase() === connectedAddress.toLowerCase()
+      const addr = connectedAddress.toLowerCase();
+      base = base.filter((cert: Certificate) =>
+        cert.recipientAddress?.toLowerCase() === addr ||
+        cert.owner?.toLowerCase() === addr
       );
     }
 
@@ -240,8 +241,12 @@ export default function Dashboard() {
       return;
     }
 
-    const filtered = base.filter((cert) => 
-      false
+    const filtered = base.filter((cert: Certificate) =>
+      cert.recipientName?.toLowerCase().includes(query) ||
+      cert.certificateType?.toLowerCase().includes(query) ||
+      cert.institutionName?.toLowerCase().includes(query) ||
+      cert.id?.toLowerCase().includes(query) ||
+      cert.recipientAddress?.toLowerCase().includes(query)
     );
 
     setFilteredCertificates(filtered);
