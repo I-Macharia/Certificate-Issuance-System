@@ -398,7 +398,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredCertificates.map((cert, index) => (
+                {filteredCertificates.map((cert, _index) => (
                   <motion.div
                     key={cert.id}
                   >
