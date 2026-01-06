@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { CERTIFICATE_SYSTEM_ADDRESS, NFT_CERTIFICATE_ADDRESS, CERTIFICATE_SYSTEM_ABI, NFT_CERTIFICATE_ABI, AVALANCHE_FUJI_CONFIG } from "./contractConfig";
 
 export interface Certificate {
+  owner: any;
   id: string;
   certificateId?: string;
   recipientName: string;
@@ -479,6 +480,7 @@ export class CertificateService {
         }
         const tokenURI = await this.nftContract!.tokenURI(certificateId);
         return {
+          owner,
           id: certificateId,
           certificateId,
           recipientName: storedCert?.recipientName || "Unknown",
@@ -498,6 +500,7 @@ export class CertificateService {
           return null;
         }
         return {
+          owner: certificate.owner,
           id: certificate.id.toString(),
           certificateId: certificate.id.toString(),
           recipientName: certificate.recipientName,
@@ -594,6 +597,43 @@ export class CertificateService {
       return false;
     }
   }
+
+  async getProvider(): Promise<ethers.BrowserProvider | null> {
+    return this.provider;
+  }
+
+  /**
+   * Get a read-only instance of the certificate contract.
+   * Does not require a wallet connection, useful for querying events.
+   */
+  async getReadOnlyContract(): Promise<ethers.Contract & ContractMethods> {
+    if (!this.provider) {
+      throw new Error("Provider not initialized. Call init() first.");
+    }
+    // Create a read-only contract instance using the provider
+    return new ethers.Contract(
+          CERTIFICATE_SYSTEM_ADDRESS,
+          CERTIFICATE_SYSTEM_ABI,
+          this.provider
+        ) as ethers.Contract & ContractMethods;
+  }
+
+  /**
+   * Get a read-only instance of the NFT certificate contract.
+   * Does not require a wallet connection, useful for querying events.
+   */
+  async getReadOnlyNFTContract(): Promise<ethers.Contract & NFTContractMethods> {
+    if (!this.provider) {
+      throw new Error("Provider not initialized. Call init() first.");
+    }
+    // Create a read-only contract instance using the provider
+    return new ethers.Contract(
+          NFT_CERTIFICATE_ADDRESS,
+          NFT_CERTIFICATE_ABI,
+          this.provider
+        ) as ethers.Contract & NFTContractMethods;
+  }
+  
 }
 
 export const certificateService = new CertificateService();
