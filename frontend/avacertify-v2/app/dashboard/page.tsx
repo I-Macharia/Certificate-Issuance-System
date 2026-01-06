@@ -401,9 +401,6 @@ export default function Dashboard() {
                 {filteredCertificates.map((cert, index) => (
                   <motion.div
                     key={cert.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
                     <Card
                       className="cursor-pointer hover:bg-accent transition-colors"
