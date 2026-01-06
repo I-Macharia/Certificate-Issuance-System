@@ -326,6 +326,7 @@ export default function AdminPage() {
             }
 
             const newCertificate: Certificate = {
+                owner: formData.recipientAddress,
                 id: certificateId,
                 certificateId,
                 recipientName: formData.recipientName,
@@ -466,6 +467,7 @@ export default function AdminPage() {
 
                     if (certificateId) {
                         const newCertificate: Certificate = {
+                            owner: recipientAddress,
                             id: certificateId,
                             certificateId,
                             recipientName: cert.studentName,
