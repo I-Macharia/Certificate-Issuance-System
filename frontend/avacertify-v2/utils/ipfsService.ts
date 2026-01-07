@@ -1,7 +1,21 @@
 // src/utils/ipfsService.ts
 import { Buffer } from "buffer";
 
-export class IPFSService {
+export type IPFSMetadata = {
+  name: string;
+  description: string;
+  image?: string;
+  attributes?: Array<{ trait_type: string; value: string }>;
+};
+
+export interface IPFSServiceInterface {
+  uploadFile(file: File): Promise<string>;
+  uploadJSON(json: object): Promise<string>;
+  generateMetadata(name: string, description: string, documentHash: string, backgroundColor: string, organization: string): IPFSMetadata;
+  getGatewayUrl(hash: string): string;
+}
+
+export class IPFSService implements IPFSServiceInterface {
   private pinataApiKey: string;
   private pinataApiSecret: string;
   private gatewayUrl: string = "https://gateway.pinata.cloud/ipfs/";
@@ -69,7 +83,7 @@ export class IPFSService {
     documentHash: string,
     backgroundColor: string,
     organization: string
-  ): object {
+  ): IPFSMetadata {
     return {
       name,
       description,

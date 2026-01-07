@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, CheckCircle, Download } from "lucide-react";
 import { certificateService, Certificate } from "@/utils/blockchain";
-import { IPFSService } from "@/utils/ipfsService";
+import { IPFSService, IPFSServiceInterface } from "@/utils/ipfsService";
 import { CERTIFICATE_SYSTEM_ADDRESS, NFT_CERTIFICATE_ADDRESS, AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
 import { ethers } from "ethers";
 
@@ -55,7 +55,7 @@ export default function AdminPage() {
         recipientName: "",
         certificateType: "",
         issueDate: "",
-        institutionName: "AvaCertify",
+        institutionName: "",
         logoUrl: "",
         brandColor: "#FFFFFF",
     });
@@ -63,7 +63,7 @@ export default function AdminPage() {
     const [isBulkGenerating, setIsBulkGenerating] = useState(false);
     const [bulkResults, setBulkResults] = useState<BulkCertificate[]>([]);
     const { toast } = useToast();
-    const ipfsService = (() => {
+    const ipfsService: IPFSServiceInterface | null = (() => {
         try {
             return new IPFSService();
         } catch (error) {
@@ -326,6 +326,7 @@ export default function AdminPage() {
             }
 
             const newCertificate: Certificate = {
+                owner: formData.recipientAddress,
                 id: certificateId,
                 certificateId,
                 recipientName: formData.recipientName,
@@ -353,7 +354,7 @@ export default function AdminPage() {
                 recipientName: "",
                 certificateType: "",
                 issueDate: "",
-                institutionName: "AvaCertify",
+                institutionName: "",
                 logoUrl: "",
                 brandColor: "#FFFFFF",
             });
@@ -466,6 +467,7 @@ export default function AdminPage() {
 
                     if (certificateId) {
                         const newCertificate: Certificate = {
+                            owner: recipientAddress,
                             id: certificateId,
                             certificateId,
                             recipientName: cert.studentName,
@@ -500,9 +502,10 @@ export default function AdminPage() {
                             address: recipientAddress
                         });
                     }
-                } catch (error: any) {
+                } catch (error: unknown) {
                     console.error(`Error generating certificate for ${cert.studentName}:`, error);
-                    errors.push(`${cert.studentName}: ${error.message || 'Unknown error'}`);
+                    const msg = error instanceof Error ? error.message : String(error);
+                    errors.push(`${cert.studentName}: ${msg || 'Unknown error'}`);
                 }
             }
 
@@ -523,10 +526,11 @@ export default function AdminPage() {
                 });
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
             toast({
                 title: "Bulk Generation Failed",
-                description: error.message || "Failed to generate certificates",
+                description: msg || "Failed to generate certificates",
                 variant: "destructive",
             });
         } finally {

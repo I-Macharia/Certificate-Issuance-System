@@ -27,12 +27,9 @@ export default function Documentation() {
           </Card>
         </section>
 
-        <motion.section
+        <section
           id="problem-statement"
           className="mb-16"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
         >
           <h2 className="text-2xl font-bold mb-6">Problem Statement</h2>
           <div className="space-y-4">
@@ -48,14 +45,11 @@ export default function Documentation() {
               </CardContent>
             </Card>
           </div>
-        </motion.section>
+        </section>
 
-        <motion.section
+        <section
           id="technical-architecture"
           className="mb-16"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
         >
           <h2 className="text-2xl font-bold mb-6">Technical Architecture</h2>
           <Tabs defaultValue="smart-contracts">
@@ -127,7 +121,7 @@ contract AvaCertify is ERC721URIStorage, Ownable {
               </Card>
             </TabsContent>
           </Tabs>
-        </motion.section>
+        </section>
 
         {/* Additional sections continue with similar structure */}
       </motion.div>

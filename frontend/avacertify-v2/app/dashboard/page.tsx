@@ -4,61 +4,37 @@ import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { FileText, Copy, ExternalLink, Loader2, Upload, CheckCircle } from "lucide-react";
-import dynamic from "next/dynamic";
+import { FileText, Copy, ExternalLink, Loader2, Search, RefreshCw, AlertCircle } from "lucide-react";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Certificate, certificateService } from "@/utils/blockchain";
-import { IPFSService } from "@/utils/ipfsService";
 import { AVALANCHE_FUJI_CONFIG } from "@/utils/contractConfig";
-import { ethers } from "ethers";
-
-const MotionDiv = dynamic(() => import("framer-motion").then((mod) => mod.motion.div), { ssr: false });
+import { motion } from 'framer-motion';
+// import { Alert, AlertDescription } from "@/components/ui/alert";
 
 /**
- * Dashboard component for certificate issuance and management.
- * Provides UI and logic for issuing new certificates, viewing issued certificates, and managing organization registration.
- *
- * Handles user interactions for certificate creation, file uploads to IPFS, and displays certificate details.
- * Manages blockchain connectivity, organization registration, and certificate state.
+ * Dashboard component for viewing issued certificates.
+ * Fetches certificates by querying blockchain events.
  */
 export default function Dashboard() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isIssuing, setIsIssuing] = useState(false);
-  const [isNFT, setIsNFT] = useState(false);
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [uploadState, setUploadState] = useState({
-    isUploading: false,
-    documentHash: "",
-    metadataHash: "",
-    documentUrl: "",
-  });
-  const [formData, setFormData] = useState({
-    recipientName: "",
-    recipientAddress: "",
-    certificateType: "",
-    issueDate: "",
-    expirationDate: "",
-    additionalDetails: "",
-    institutionName: "AvaCertify",
-    logoUrl: "",
-    brandColor: "#FFFFFF",
-  });
+  const [isConnected, _setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [connectedAddress, _setConnectedAddress] = useState<string>("");
+  const [selectedContract, setSelectedContract] = useState<"standard" | "nft" | "all">("all");
+  const [showMyOnly, setShowMyOnly] = useState(false);
   const { toast } = useToast();
-  const ipfsService = new IPFSService();
 
   /**
    * Checks if the connected blockchain network matches the required Avalanche Fuji Testnet.
-   * Ensures that certificate operations are performed on the correct network.
-   *
-   * Throws an error if the user is not connected to the Avalanche Fuji Testnet.
    */
   const checkNetwork = useCallback(async () => {
     const network = await certificateService.getNetwork();
@@ -68,193 +44,230 @@ export default function Dashboard() {
   }, []);
 
   /**
-   * Fetches issued certificates from local storage and updates them with blockchain data.
-   * Synchronizes certificate state between local storage and the blockchain.
-   *
-   * Displays an error toast if fetching certificates fails.
+   * Fetches certificates by querying CertificateIssued events from the blockchain.
+   * Implements pagination to handle RPC provider block limits (2048 blocks per query).
    */
-  const fetchCertificates = useCallback(async () => {
+  const fetchCertificatesFromBlockchain = useCallback(async () => {
+    setIsLoading(true);
     try {
-      await checkNetwork();
-      const storedCertificates = JSON.parse(localStorage.getItem("certificates") || "[]") as Certificate[];
-      const blockchainCertificates: Certificate[] = [];
-      for (const cert of storedCertificates) {
-        const blockchainCert = await certificateService.getCertificate(cert.id, cert.isNFT || false);
-        if (blockchainCert) {
-          blockchainCertificates.push({ ...blockchainCert, transactionHash: cert.transactionHash });
-        }
+      // Initialize blockchain service
+      await certificateService.init();
+      
+      // Note: do not attempt to force wallet connection here.
+      // Initialize provider/network check independently of user wallet connection.
+      try {
+        await checkNetwork();
+      } catch (networkErr) {
+        // If network check fails because no wallet is connected, we still want to
+        // continue reading from the provider (public RPC) so do not abort here.
+        console.warn("Network check failed (proceeding with provider):", networkErr);
       }
-      setCertificates(blockchainCertificates);
-      localStorage.setItem("certificates", JSON.stringify(blockchainCertificates));
+
+      // Get read-only contract instances (no wallet required)
+      const contract = await certificateService.getReadOnlyContract();
+      const nftContract = await certificateService.getReadOnlyNFTContract();
+      const provider = await certificateService.getProvider();
+      
+      if (!provider) {
+        throw new Error("Provider not available");
+      }
+
+      const allCertificates: Certificate[] = [];
+      const BLOCK_RANGE = 2000; // Stay under 2048 limit
+      const MAX_BLOCKS_TO_SCAN = 1000000000; // Scan up to 1000 million blocks back
+
+      const currentBlock = await provider.getBlockNumber();
+      const startBlock = Math.max(0, currentBlock - MAX_BLOCKS_TO_SCAN);
+
+      console.log(`Scanning from block ${startBlock} to ${currentBlock}`);
+      setLoadingProgress(`Scanning blocks ${startBlock} to ${currentBlock}...`);
+
+      // Query CertificateIssued events for standard certificates in chunks
+      try {
+        const filter = contract.filters.CertificateIssued();
+        let scannedBlocks = 0;
+        const totalBlocks = currentBlock - startBlock;
+        
+        for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += BLOCK_RANGE) {
+          const toBlock = Math.min(fromBlock + BLOCK_RANGE - 1, currentBlock);
+          scannedBlocks += (toBlock - fromBlock + 1);
+          
+          setLoadingProgress(`Scanning certificates: ${Math.round((scannedBlocks / totalBlocks) * 100)}%`);
+          
+          try {
+            const events = await contract.queryFilter(filter, fromBlock, toBlock);
+            console.log(`Found ${events.length} CertificateIssued events in blocks ${fromBlock}-${toBlock}`);
+
+            // Fetch details for each certificate
+          for (const event of events) {
+            // Narrow to EventLog (which has `args`) and skip plain Log entries
+            if (!("args" in event)) continue;
+
+            try {
+              const certificateId = event.args?.id?.toString();
+              if (!certificateId) continue;
+
+                const cert = await certificateService.getCertificateReadOnly(certificateId, false);
+                if (cert && cert.recipientAddress !== "0x0000000000000000000000000000000000000000") {
+                  allCertificates.push({
+                    ...cert,
+                    transactionHash: event.transactionHash,
+                  });
+                }
+              } catch (error) {
+                console.error(`Failed to fetch certificate ${event.args?.id}:`, error);
+              }
+            }
+          } catch (error) {
+            console.error(`Error querying blocks ${fromBlock}-${toBlock}:`, error);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to query standard certificate events:", error);
+      }
+
+      // Query CertificateMinted events for NFT certificates in chunks
+      try {
+        const nftFilter = nftContract.filters.CertificateMinted();
+        let scannedBlocks = 0;
+        const totalBlocks = currentBlock - startBlock;
+        
+        for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += BLOCK_RANGE) {
+          const toBlock = Math.min(fromBlock + BLOCK_RANGE - 1, currentBlock);
+          scannedBlocks += (toBlock - fromBlock + 1);
+          
+          setLoadingProgress(`Scanning NFTs: ${Math.round((scannedBlocks / totalBlocks) * 100)}%`);
+          
+          try {
+            const nftEvents = await nftContract.queryFilter(nftFilter, fromBlock, toBlock);
+            console.log(`Found ${nftEvents.length} NFT events in blocks ${fromBlock}-${toBlock}`);
+
+            for (const event of nftEvents) {
+              // Narrow to EventLog (which has `args`) and skip plain Log entries
+              if (!("args" in event)) continue;
+
+              try {
+                const tokenId = event.args?.tokenId?.toString();
+                if (!tokenId) continue;
+
+                const cert = await certificateService.getCertificateReadOnly(tokenId, true);
+                if (cert) {
+                  allCertificates.push({
+                    ...cert,
+                    isNFT: true,
+                    transactionHash: event.transactionHash,
+                  });
+                }
+              } catch (error) {
+                console.error(`Failed to fetch NFT certificate ${event.args?.tokenId}:`, error);
+              }
+            }
+          } catch (error) {
+            console.error(`Error querying NFT blocks ${fromBlock}-${toBlock}:`, error);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to query NFT certificate events:", error);
+      }
+
+  // Remove duplicates
+      const uniqueCertificates = Array.from(
+        new Map(allCertificates.map(cert => [cert.id, cert])).values()
+      );
+
+      // Sort by issue date (newest first)
+      uniqueCertificates.sort((a, b) => {
+        const dateA = new Date(a.issueDate).getTime();
+        const dateB = new Date(b.issueDate).getTime();
+        return dateB - dateA;
+      });
+
+      setCertificates(uniqueCertificates);
+
+  // Save all certificates; the UI filter effect will derive the visible set
+  setFilteredCertificates(uniqueCertificates);
+
+      if (uniqueCertificates.length === 0) {
+        toast({
+          title: "No Certificates Found",
+          description: "No certificates have been issued yet on this contract.",
+        });
+      } else {
+        toast({
+          title: "Certificates Loaded",
+          description: `Successfully loaded ${uniqueCertificates.length} certificate(s) from blockchain`,
+        });
+      }
     } catch (error: unknown) {
       console.error("Failed to fetch certificates:", error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch certificates",
+        title: "Error Loading Certificates",
+        description: error instanceof Error ? error.message : "Failed to fetch certificates from blockchain",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+      setLoadingProgress("");
     }
   }, [toast, checkNetwork]);
 
+  /**
+   * Filters certificates based on search query
+   */
   useEffect(() => {
-    const initBlockchain = async () => {
-      try {
-        await certificateService.init();
-        const address = await certificateService.getConnectedAddress();
-        if (address) {
-          setIsConnected(true);
-          await checkNetwork();
-          const registered = await certificateService.isOrganizationRegistered();
-          setIsRegistered(registered);
-          toast({
-            title: "Connected",
-            description: `Wallet connected: ${address.slice(0, 6)}...${address.slice(-4)}`,
-          });
-          fetchCertificates();
-        }
-      } catch (error: unknown) {
-        setIsConnected(false);
-        toast({
-          title: "Connection Error",
-          description: error instanceof Error ? error.message : "Failed to connect wallet",
-          variant: "destructive",
-        });
-      }
-    };
-    initBlockchain();
-  }, [toast, fetchCertificates, checkNetwork]);
+    const query = searchQuery.trim().toLowerCase();
 
-  /**
-   * Handles uploading a certificate document to IPFS and updates upload state.
-   * Validates file type and size before uploading, and provides user feedback via toasts.
-   *
-   * Updates the document and metadata hashes in the component state after successful upload.
-   */
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
+    //](VALID_DIRECTORY) Start from all certificates
+    let base: Certificate[] = certificates;
+
+    //](VALID_DIRECTORY) Apply contract type filter first
+    if (selectedContract === "nft") {
+      base = base.filter((c: Certificate) => c.isNFT);
+    } else if (selectedContract === "standard") {
+      base = base.filter((c: Certificate) => !c.isNFT);
     }
 
-    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
-    const maxSize = 5 * 1024 * 1024;
-
-    if (!allowedTypes.includes(file.type)) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please upload a PDF or image file (JPG, PNG)",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (file.size > maxSize) {
-      toast({
-        title: "File Too Large",
-        description: "File size must be less than 5MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setUploadState((prev) => ({ ...prev, isUploading: true }));
-
-    try {
-      // Check if Pinata credentials are configured
-      if (!process.env.NEXT_PUBLIC_PINATA_JWT || !process.env.NEXT_PUBLIC_PINATA_GATEWAY) {
-        throw new Error("IPFS upload not configured. Please add Pinata credentials to continue.");
-      }
-      
-      // Only instantiate IPFSService when actually needed
-      const ipfsService = new IPFSService() as any;
-      
-      const documentHash = await ipfsService.uploadFile(file);
-      const documentUrl = ipfsService.getGatewayUrl(documentHash);
-      const metadata = ipfsService.generateMetadata(
-        formData.certificateType || "Certificate",
-        "Certificate issued by AvaCertify",
-        documentHash,
-        formData.brandColor,
-        formData.institutionName
+    //](VALID_DIRECTORY) If user requested only their certificates, further narrow by connectedAddress
+    if (showMyOnly && connectedAddress) {
+      const addr = connectedAddress.toLowerCase();
+      base = base.filter((cert: Certificate) =>
+        cert.recipientAddress?.toLowerCase() === addr ||
+        cert.owner?.toLowerCase() === addr
       );
-      const metadataHash = await ipfsService.uploadJSON(metadata);
-
-      setUploadState((prev) => ({
-        ...prev,
-        isUploading: false,
-        documentHash,
-        metadataHash,
-        documentUrl,
-      }));
-
-      toast({
-        title: "File Uploaded",
-        description: "Document and metadata successfully uploaded to IPFS",
-      });
-    } catch (error: unknown) {
-      setUploadState((prev) => ({ ...prev, isUploading: false }));
-      toast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload file to IPFS",
-        variant: "destructive",
-      });
-      // Clear the file input
-      const fileInput = event.target;
-      if (fileInput) fileInput.value = "";
     }
-  };
 
-  /**
-   * Updates the form data state for certificate issuance.
-   * Allows controlled input fields to update their corresponding values.
-   *
-   * Args:
-   *   field: The name of the form field to update.
-   *   value: The new value for the specified field.
-   */
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  /**
-   * Registers the organization for NFT certificate issuance.
-   * Validates required fields and provides user feedback on registration status.
-   *
-   * Displays a toast notification for success or failure.
-   */
-  const handleRegisterOrganization = async () => {
-    if (!formData.logoUrl || !formData.brandColor) {
-      toast({
-        title: "Missing Information",
-        description: "Please provide logo URL and brand color",
-        variant: "destructive",
-      });
+    if (!query) {
+      setFilteredCertificates(base);
       return;
     }
 
-    try {
-      await certificateService.registerOrganization(formData.logoUrl, formData.brandColor);
-      setIsRegistered(true);
-      toast({
-        title: "Organization Registered",
-        description: "Successfully registered organization for NFT certificates",
-      });
-    } catch (error: unknown) {
-      toast({
-        title: "Registration Failed",
-        description: error instanceof Error ? error.message : "Failed to register organization",
-        variant: "destructive",
-      });
-    }
+    const filtered = base.filter((cert: Certificate) =>
+      cert.recipientName?.toLowerCase().includes(query) ||
+      cert.certificateType?.toLowerCase().includes(query) ||
+      cert.institutionName?.toLowerCase().includes(query) ||
+      cert.id?.toLowerCase().includes(query) ||
+      cert.recipientAddress?.toLowerCase().includes(query)
+    );
+
+    setFilteredCertificates(filtered);
+  }, [searchQuery, certificates, selectedContract, showMyOnly, connectedAddress]);
+
+  /**
+   * Initialize and fetch certificates on mount
+   */
+  useEffect(() => {
+    fetchCertificatesFromBlockchain();
+  }, [fetchCertificatesFromBlockchain]);
+
+  /**
+   * Manual refresh handler
+   */
+  const handleRefresh = async () => {
+    await fetchCertificatesFromBlockchain();
   };
 
   /**
-   * Copies the specified text to the clipboard and shows a confirmation toast.
-   * Used for copying certificate details such as IDs and addresses.
-   *
-   * Args:
-   *   text: The text to copy to the clipboard.
-   *   label: A label describing the copied content for user feedback.
+   * Copies text to clipboard with user feedback
    */
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -265,456 +278,238 @@ export default function Dashboard() {
   };
 
   /**
-   * Handles the issuance of a new certificate or NFT certificate.
-   * Validates form data, interacts with blockchain and IPFS, and updates certificate state.
-   *
-   * Args:
-   *   event: The form submission event.
+   * Formats a blockchain address for display
    */
-  const handleIssueCertificate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!isConnected) {
-      toast({
-        title: "Connection Error",
-        description: "Please connect your wallet first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      await checkNetwork();
-      const { recipientName, recipientAddress, certificateType, issueDate, expirationDate, additionalDetails, institutionName } = formData;
-
-      if (!recipientName || !recipientAddress || !certificateType || !issueDate || !institutionName) {
-        throw new Error("Missing required fields");
-      }
-
-      if (!ethers.isAddress(recipientAddress)) {
-        throw new Error("Invalid recipient address");
-      }
-
-      if (recipientName.length > 100) {
-        throw new Error("Recipient name too long (max 100 characters)");
-      }
-
-      if (isNFT && !isRegistered) {
-        throw new Error("Organization not registered. Please register first.");
-      }
-
-      if (!isNFT) {
-        const hasRole = await certificateService.hasIssuerRole();
-        if (!hasRole) {
-          throw new Error("Wallet does not have ISSUER_ROLE. Contact admin to grant role.");
-        }
-      }
-
-      setIsIssuing(true);
-      toast({
-        title: "Transaction Pending",
-        description: "Please confirm the transaction in your wallet",
-      });
-
-      let certificateId: string;
-      if (isNFT) {
-        // Only instantiate IPFSService when needed for NFT
-        const ipfsService = new IPFSService();
-        const metadata = ipfsService.generateMetadata(
-          certificateType,
-          "Certificate issued by AvaCertify",
-          uploadState.documentHash,
-          formData.brandColor,
-          institutionName
-        );
-        const metadataHash = await ipfsService.uploadJSON(metadata);
-        certificateId = await certificateService.mintNFTCertificate(recipientAddress, ipfsService.getGatewayUrl(metadataHash));
-      } else {
-        certificateId = await certificateService.issueCertificate(recipientName, recipientAddress);
-      }
-
-      if (!certificateId) {
-        throw new Error("Failed to retrieve certificate ID");
-      }
-
-      const newCertificate: Certificate = {
-        id: certificateId,
-        certificateId,
-        recipientName,
-        recipientAddress,
-        certificateType,
-        issueDate,
-        expirationDate: expirationDate || undefined,
-        institutionName,
-        status: "active",
-        additionalDetails,
-        documentHash: uploadState.documentHash,
-        documentUrl: uploadState.documentUrl,
-        isNFT,
-      };
-
-      setCertificates((prev) => [...prev, newCertificate]);
-      localStorage.setItem("certificates", JSON.stringify([...certificates, newCertificate]));
-
-      toast({
-        title: isNFT ? "NFT Certificate Issued" : "Certificate Issued",
-        description: `Certificate ${certificateId} issued successfully to ${recipientName}`,
-      });
-
-      setFormData({
-        recipientName: "",
-        recipientAddress: "",
-        certificateType: "",
-        issueDate: "",
-        expirationDate: "",
-        additionalDetails: "",
-        institutionName: "AvaCertify",
-        logoUrl: "",
-        brandColor: "#FFFFFF",
-      });
-      setUploadState({
-        isUploading: false,
-        documentHash: "",
-        metadataHash: "",
-        documentUrl: "",
-      });
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (fileInput) {
-        fileInput.value = "";
-      }
-    } catch (error: unknown) {
-      let message = isNFT ? "Failed to mint NFT certificate" : "Failed to issue certificate";
-      if (error instanceof Error) {
-        if (error.message.includes("4001") || error.message.includes("ACTION_REJECTED")) {
-          message = "User rejected the transaction";
-        } else if (error.message.includes("insufficient funds")) {
-          message = "Insufficient AVAX for gas fees. Get test AVAX from faucet.";
-        } else if (error.message.includes("network")) {
-          message = "Please ensure you're connected to the Avalanche Fuji Testnet";
-        } else if (error.message.includes("not authorized") || error.message.includes("ISSUER_ROLE")) {
-          message = "Wallet not authorized to issue certificates. Contact admin.";
-        } else if (error.message.includes("not registered")) {
-          message = "Organization not registered. Please register first.";
-        } else if (error.message.includes("CALL_EXCEPTION")) {
-          message = "Transaction failed: Likely unauthorized issuer or invalid parameters.";
-        } else {
-          message = error.message;
-        }
-      }
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsIssuing(false);
-    }
+  const formatAddress = (address: string) => {
+    if (!address) return "N/A";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  function isFormValid(): boolean {
-    const { recipientName, recipientAddress, certificateType, issueDate, institutionName, expirationDate } = formData;
+  /**
+   * Opens block explorer for transaction hash
+   */
+  const openBlockExplorer = (txHash: string) => {
+    const explorerUrl = `https://testnet.snowtrace.io/tx/${txHash}`;
+    window.open(explorerUrl, '_blank', 'noopener,noreferrer');
+  };
 
-    // Required fields
-    if (!recipientName || !recipientAddress || !certificateType || !issueDate || !institutionName) {
-      return false;
-    }
-
-    // Basic length constraint
-    if (recipientName.length > 100) {
-      return false;
-    }
-
-    // Validate Ethereum address format
-    if (!ethers.isAddress(recipientAddress)) {
-      return false;
-    }
-
-    // If a file is still uploading, form is not valid for submit
-    if (uploadState.isUploading) {
-      return false;
-    }
-
-    // If an expiration date is provided, it must be after the issue date
-    if (expirationDate) {
-      try {
-        const issue = new Date(issueDate);
-        const exp = new Date(expirationDate);
-        if (isNaN(issue.getTime()) || isNaN(exp.getTime()) || exp <= issue) {
-          return false;
-        }
-      } catch {
-        return false;
-      }
-    }
-
-    // Additional checks for NFT issuance
-    if (isNFT) {
-      // Organization must be registered and branding provided to mint NFTs
-      if (!isRegistered) return false;
-      if (!formData.logoUrl || !formData.brandColor) return false;
-    }
-
-    return true;
-  }
   return (
     <Layout>
       <div className="container py-10">
-        <h1 className="text-3xl font-bold mb-6">Certificate Dashboard</h1>
-        <Tabs defaultValue="issue" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="issue">Issue Certificate</TabsTrigger>
-            <TabsTrigger value="view">View Certificates</TabsTrigger>
-          </TabsList>
-          <TabsContent value="issue">
-            <Card>
-              <CardHeader>
-                <CardTitle>Issue New Certificate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleIssueCertificate} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Certificate Type</Label>
-                    <div className="flex space-x-4">
-                      <Button
-                        type="button"
-                        variant={isNFT ? "outline" : "default"}
-                        onClick={() => setIsNFT(false)}
-                      >
-                        Standard Certificate
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={isNFT ? "default" : "outline"}
-                        onClick={() => setIsNFT(true)}
-                      >
-                        NFT Certificate
-                      </Button>
-                    </div>
-                  </div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold">Certificate Dashboard</h1>
+            <p className="text-muted-foreground mt-2">
+              View all certificates issued through the platform
+            </p>
+            {connectedAddress && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Connected: {formatAddress(connectedAddress)}
+              </p>
+            )}
+          </div>
+          <Button 
+            onClick={handleRefresh} 
+            disabled={isLoading}
+            variant="outline"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </>
+            )}
+          </Button>
+        </div>
 
-                  {isNFT && !isRegistered && (
-                    <div className="space-y-4 p-4 border rounded-lg bg-muted">
-                      <p className="text-sm font-medium">Register your organization first to issue NFT certificates</p>
-                      <div className="space-y-2">
-                        <Label htmlFor="logoUrl">Logo URL *</Label>
-                        <Input
-                          id="logoUrl"
-                          value={formData.logoUrl}
-                          onChange={(e) => handleInputChange("logoUrl", e.target.value)}
-                          placeholder="https://example.com/logo.png"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="brandColor">Brand Color *</Label>
-                        <Input
-                          id="brandColor"
-                          type="color"
-                          value={formData.brandColor}
-                          onChange={(e) => handleInputChange("brandColor", e.target.value)}
-                        />
-                      </div>
-                      <Button type="button" onClick={handleRegisterOrganization} className="w-full">
-                        Register Organization
-                      </Button>
-                    </div>
-                  )}
+        {isLoading && (
+          <Card className="mb-6 border-dashed">
+            <CardContent className="flex items-center gap-3 py-3">
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Querying blockchain events... This may take a moment.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="document">Certificate Document (Optional - Requires IPFS Setup)</Label>
-                    <Input
-                      id="document"
-                      type="file"
-                      accept="application/pdf,image/*"
-                      onChange={handleFileUpload}
-                      disabled={uploadState.isUploading}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      File upload requires Pinata IPFS credentials. You can issue certificates without uploading documents.
-                    </p>
-                    {uploadState.isUploading && (
-                      <div className="flex items-center mt-2">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <p className="text-sm">Uploading to IPFS...</p>
-                      </div>
-                    )}
-                    {uploadState.documentHash && (
-                      <div className="mt-2 p-2 bg-green-50 rounded border flex items-center">
-                        <CheckCircle className="h-4 w-4 text-green-600 mr-2 flex-shrink-0" />
-                        <div className="text-sm">
-                          <p className="text-green-700">File uploaded successfully</p>
-                          <p className="text-muted-foreground text-xs">IPFS Hash: {uploadState.documentHash}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="recipientName">Recipient Name *</Label>
-                    <Input
-                      id="recipientName"
-                      value={formData.recipientName}
-                      onChange={(e) => handleInputChange("recipientName", e.target.value)}
-                      placeholder="Full name"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="recipientAddress">Recipient Address *</Label>
-                    <Input
-                      id="recipientAddress"
-                      value={formData.recipientAddress}
-                      onChange={(e) => handleInputChange("recipientAddress", e.target.value)}
-                      placeholder="0x..."
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="certificateType">Certificate Type *</Label>
-                    <Input
-                      id="certificateType"
-                      value={formData.certificateType}
-                      onChange={(e) => handleInputChange("certificateType", e.target.value)}
-                      placeholder="e.g., Bachelor of Science"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="issueDate">Issue Date *</Label>
-                    <Input
-                      type="date"
-                      id="issueDate"
-                      value={formData.issueDate}
-                      onChange={(e) => handleInputChange("issueDate", e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="expirationDate">Expiration Date (Optional)</Label>
-                    <Input
-                      type="date"
-                      id="expirationDate"
-                      value={formData.expirationDate}
-                      onChange={(e) => handleInputChange("expirationDate", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="institutionName">Institution Name *</Label>
-                    <Input
-                      id="institutionName"
-                      value={formData.institutionName}
-                      onChange={(e) => handleInputChange("institutionName", e.target.value)}
-                      placeholder="e.g., AvaCertify"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="additionalDetails">Additional Details (Optional)</Label>
-                    <Textarea
-                      id="additionalDetails"
-                      value={formData.additionalDetails}
-                      onChange={(e) => handleInputChange("additionalDetails", e.target.value)}
-                      placeholder="Additional certificate information"
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={isIssuing || !isConnected || !isFormValid()}
-                    className="w-full"
-                  >
-                    {isIssuing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Issuing Certificate...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Issue {isNFT ? "NFT" : ""} Certificate
-                      </>
-                    )}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex justify-between items-center">
+              <span>Issued Certificates ({filteredCertificates.length})</span>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search certificates..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-48">
+                  <Select value={selectedContract} onValueChange={(val) => setSelectedContract(val as "standard" | "nft" | "all")}>
+                    <SelectTrigger className="w-full h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Contracts</SelectItem>
+                      <SelectItem value="standard">Standard Certificates</SelectItem>
+                      <SelectItem value="nft">NFT Certificates</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {isConnected && (
+                  <Button onClick={() => setShowMyOnly(prev => !prev)} variant={showMyOnly ? "secondary" : "ghost"}>
+                    {showMyOnly ? "Showing: My Certificates" : "My Certificates Only"}
                   </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="view">
-            <Card>
-              <CardHeader>
-                <CardTitle>Issued Certificates</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {certificates.length === 0 ? (
-                  <p className="text-muted-foreground">No certificates issued yet.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {certificates.map((cert) => (
-                      <MotionDiv
-                        key={cert.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card
-                          className="cursor-pointer hover:bg-accent"
-                          onClick={() => {
-                            setSelectedCertificate(cert);
-                            setIsDialogOpen(true);
-                          }}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <h3 className="font-semibold">{cert.certificateType}</h3>
-                                <p className="text-sm text-muted-foreground">
-                                  Issued to: {cert.recipientName}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  Status: {cert.status} {cert.isNFT && "(NFT)"}
-                                </p>
-                              </div>
-                              <FileText className="h-6 w-6 text-primary" />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </MotionDiv>
-                    ))}
-                  </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Loading certificates from blockchain...</p>
+                {loadingProgress && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {loadingProgress}
+                  </p>
+                )}
+              </div>
+            ) : filteredCertificates.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-2">
+                  {searchQuery ? "No certificates found matching your search" : "No certificates issued yet"}
+                </p>
+                {!searchQuery && (
+                  <p className="text-sm text-muted-foreground">
+                    Certificates will appear here after they are issued
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredCertificates.map((cert, _index) => (
+                  <motion.div
+                    key={cert.id}
+                  >
+                    <Card
+                      className="cursor-pointer hover:bg-accent transition-colors"
+                      onClick={() => {
+                        setSelectedCertificate(cert);
+                        setIsDialogOpen(true);
+                      }}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-semibold text-lg">
+                                {cert.certificateType || "Certificate"}
+                              </h3>
+                              {cert.isNFT ? (
+                                <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                                  NFT
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">Standard</span>
+                              )}
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                cert.status === "active" 
+                                  ? "bg-green-100 text-green-700" 
+                                  : "bg-red-100 text-red-700"
+                              }`}>
+                                {cert.status || "active"}
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-sm text-muted-foreground">
+                              <p>
+                                <span className="font-medium">Recipient:</span> {cert.recipientName || "N/A"}
+                              </p>
+                              <p>
+                                <span className="font-medium">Address:</span> {formatAddress(cert.recipientAddress)}
+                              </p>
+                              {cert.institutionName && (
+                                <p>
+                                  <span className="font-medium">Institution:</span> {cert.institutionName}
+                                </p>
+                              )}
+                              {cert.issueDate && (
+                                <p>
+                                  <span className="font-medium">Issue Date:</span>{" "}
+                                  {new Date(cert.issueDate).toLocaleDateString()}
+                                </p>
+                              )}
+                              <p>
+                                <span className="font-medium">ID:</span> {cert.id}
+                              </p>
+                            </div>
+                          </div>
+                          <FileText className="h-8 w-8 text-primary flex-shrink-0" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Certificate Details</DialogTitle>
               <DialogDescription>
-                Detailed information about the selected certificate.
+                Complete information about the selected certificate
               </DialogDescription>
             </DialogHeader>
             {selectedCertificate && (
               <div className="space-y-4">
-                <div>
-                  <Label>Certificate ID {selectedCertificate.isNFT && "(Token ID)"}</Label>
-                  <div className="flex items-center space-x-2">
-                    <p className="truncate">{selectedCertificate.id}</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(selectedCertificate.id, "Certificate ID")}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">
+                      Certificate ID {selectedCertificate.isNFT && "(Token ID)"}
+                    </Label>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-sm font-mono truncate">{selectedCertificate.id}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(selectedCertificate.id, "Certificate ID")}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <p className="text-sm font-medium mt-1 capitalize">
+                      {selectedCertificate.status || "active"}
+                      {selectedCertificate.isNFT && " (NFT)"}
+                    </p>
                   </div>
                 </div>
+
                 <div>
-                  <Label>Recipient Name</Label>
-                  <p>{selectedCertificate.recipientName}</p>
+                  <Label className="text-xs text-muted-foreground">Recipient Name</Label>
+                  <p className="text-sm font-medium mt-1">{selectedCertificate.recipientName || "N/A"}</p>
                 </div>
+
                 <div>
-                  <Label>Recipient Address</Label>
-                  <div className="flex items-center space-x-2">
-                    <p className="truncate">{selectedCertificate.recipientAddress}</p>
+                  <Label className="text-xs text-muted-foreground">Recipient Address</Label>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <p className="text-sm font-mono truncate">{selectedCertificate.recipientAddress}</p>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -726,51 +521,70 @@ export default function Dashboard() {
                     </Button>
                   </div>
                 </div>
-                <div>
-                  <Label>Certificate Type</Label>
-                  <p>{selectedCertificate.certificateType}</p>
-                </div>
-                <div>
-                  <Label>Issue Date</Label>
-                  <p>{new Date(selectedCertificate.issueDate).toLocaleDateString()}</p>
-                </div>
-                {selectedCertificate.expirationDate && (
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Expiration Date</Label>
-                    <p>{new Date(selectedCertificate.expirationDate).toLocaleDateString()}</p>
+                    <Label className="text-xs text-muted-foreground">Certificate Type</Label>
+                    <p className="text-sm font-medium mt-1">{selectedCertificate.certificateType || "Certificate"}</p>
                   </div>
-                )}
-                <div>
-                  <Label>Institution Name</Label>
-                  <p>{selectedCertificate.institutionName}</p>
+
+                  {selectedCertificate.institutionName && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Institution Name</Label>
+                      <p className="text-sm font-medium mt-1">{selectedCertificate.institutionName}</p>
+                    </div>
+                  )}
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {selectedCertificate.issueDate && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Issue Date</Label>
+                      <p className="text-sm font-medium mt-1">
+                        {new Date(selectedCertificate.issueDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedCertificate.expirationDate && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Expiration Date</Label>
+                      <p className="text-sm font-medium mt-1">
+                        {new Date(selectedCertificate.expirationDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {selectedCertificate.additionalDetails && (
                   <div>
-                    <Label>Additional Details</Label>
-                    <p>{selectedCertificate.additionalDetails}</p>
+                    <Label className="text-xs text-muted-foreground">Additional Details</Label>
+                    <p className="text-sm mt-1">{selectedCertificate.additionalDetails}</p>
                   </div>
                 )}
+
                 {selectedCertificate.documentUrl && (
                   <div>
-                    <Label>Document</Label>
-                    <div className="flex items-center space-x-2">
+                    <Label className="text-xs text-muted-foreground">Document</Label>
+                    <div className="flex items-center space-x-2 mt-1">
                       <a
                         href={selectedCertificate.documentUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
+                        className="text-sm text-blue-600 hover:underline flex items-center"
                       >
-                        View Document
+                        View Document on IPFS
+                        <ExternalLink className="h-4 w-4 ml-1" />
                       </a>
-                      <ExternalLink className="h-4 w-4" />
                     </div>
                   </div>
                 )}
+
                 {selectedCertificate.transactionHash && (
                   <div>
-                    <Label>Transaction Hash</Label>
-                    <div className="flex items-center space-x-2">
-                      <p className="truncate">{selectedCertificate.transactionHash}</p>
+                    <Label className="text-xs text-muted-foreground">Transaction Hash</Label>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-sm font-mono truncate">{selectedCertificate.transactionHash}</p>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -779,6 +593,14 @@ export default function Dashboard() {
                         }
                       >
                         <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openBlockExplorer(selectedCertificate.transactionHash!)}
+                        title="View on Snowtrace"
+                      >
+                        <ExternalLink className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>

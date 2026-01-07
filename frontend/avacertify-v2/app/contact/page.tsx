@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { motion } from "framer-motion"
+import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import type React from "react" // Added import for React
+
 
 // Dynamic imports for icons
 const Mail = dynamic(() => import('lucide-react').then(mod => mod.Mail))
@@ -30,18 +30,12 @@ export default function Contact() {
   return (
     <Layout>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
         className="container py-10"
       >
         <div className="max-w-5xl mx-auto">
           <h1 className="text-4xl font-bold mb-6">Contact Us</h1>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
             >
               <Card>
                 <CardHeader>
@@ -69,9 +63,6 @@ export default function Contact() {
               </Card>
             </motion.div>
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
               className="space-y-6"
             >
               <Card>
