@@ -56,6 +56,10 @@ declare global {
 
 export class CertificateService {
   private provider: ethers.BrowserProvider | null = null;
+    /**
+   * Public JSON-RPC provider for read-only operations (no wallet required)
+   */
+  private publicProvider: ethers.JsonRpcProvider | null = null;
   private contract: (ethers.Contract & ContractMethods) | null = null;
   private nftContract: (ethers.Contract & NFTContractMethods) | null = null;
   private signer: ethers.Signer | null = null;
@@ -69,21 +73,37 @@ export class CertificateService {
       return;
     }
 
+    // Set up a public read-only provider
+    try {
+      // Use the RPC from your network config, or hardcode if needed
+      const rpcUrl =
+        (Array.isArray(AVALANCHE_FUJI_CONFIG.rpcUrls) &&
+          AVALANCHE_FUJI_CONFIG.rpcUrls[0]) ||
+        (AVALANCHE_FUJI_CONFIG as any).rpcUrls?.[0] ||
+        "https://api.avax-test.network/ext/bc/C/rpc";
+
+      this.publicProvider = new ethers.JsonRpcProvider(rpcUrl);
+      console.log("✅ Public RPC provider initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize public RPC provider:", error);
+    }
+
+    // Browser provider (wallet) is optional for read-only flows
     if (typeof window === "undefined" || !window.ethereum) {
-      console.warn("No Web3 provider found");
+      console.warn("No Web3 wallet provider found (MetaMask/Core). Read-only RPC still available.");
+      this.isInitialized = true;
       return;
     }
 
     try {
       this.provider = new ethers.BrowserProvider(window.ethereum);
       this.isInitialized = true;
-      console.log("✅ Provider initialized");
+      console.log("✅ Wallet provider initialized");
     } catch (error) {
-      console.error("❌ Failed to initialize provider:", error);
+      console.error("❌ Failed to initialize wallet provider:", error);
       throw new Error("Failed to initialize wallet connection");
     }
   }
-
   private async validateConnection(): Promise<void> {
     if (!this.isInitialized) {
       throw new Error("Service not initialized. Call init() first.");
@@ -605,34 +625,32 @@ export class CertificateService {
 
   /**
    * Get a read-only instance of the certificate contract.
-   * Does not require a wallet connection, useful for querying events.
+   * Uses public RPC, does not require a wallet.
    */
   async getReadOnlyContract(): Promise<ethers.Contract & ContractMethods> {
-    if (!this.provider) {
-      throw new Error("Provider not initialized. Call init() first.");
+    if (!this.publicProvider) {
+      throw new Error("Public provider not initialized. Call init() first.");
     }
-    // Create a read-only contract instance using the provider
     return new ethers.Contract(
-          CERTIFICATE_SYSTEM_ADDRESS,
-          CERTIFICATE_SYSTEM_ABI,
-          this.provider
-        ) as ethers.Contract & ContractMethods;
+      CERTIFICATE_SYSTEM_ADDRESS,
+      CERTIFICATE_SYSTEM_ABI,
+      this.publicProvider
+    ) as ethers.Contract & ContractMethods;
   }
 
   /**
    * Get a read-only instance of the NFT certificate contract.
-   * Does not require a wallet connection, useful for querying events.
+   * Uses public RPC, does not require a wallet.
    */
   async getReadOnlyNFTContract(): Promise<ethers.Contract & NFTContractMethods> {
-    if (!this.provider) {
-      throw new Error("Provider not initialized. Call init() first.");
+    if (!this.publicProvider) {
+      throw new Error("Public provider not initialized. Call init() first.");
     }
-    // Create a read-only contract instance using the provider
     return new ethers.Contract(
-          NFT_CERTIFICATE_ADDRESS,
-          NFT_CERTIFICATE_ABI,
-          this.provider
-        ) as ethers.Contract & NFTContractMethods;
+      NFT_CERTIFICATE_ADDRESS,
+      NFT_CERTIFICATE_ABI,
+      this.publicProvider
+    ) as ethers.Contract & NFTContractMethods;
   }
 
   /**
@@ -640,19 +658,20 @@ export class CertificateService {
    * Used for public certificate viewing.
    */
   async getCertificateReadOnly(certificateId: string, isNFT: boolean = false): Promise<Certificate | null> {
-    if (!this.provider) {
-      throw new Error("Provider not initialized. Call init() first.");
+    if (!this.publicProvider) {
+      throw new Error("Public provider not initialized. Call init() first.");
     }
     
     if (!certificateId?.trim()) {
       throw new Error("Certificate ID is required");
     }
 
+    
     try {
       if (isNFT) {
         const nftContract = await this.getReadOnlyNFTContract();
         const owner = await nftContract.ownerOf(certificateId);
-        if (owner === ethers.ZeroAddress) {
+        if (!owner || owner === ethers.ZeroAddress) {
           return null;
         }
         const tokenURI = await nftContract.tokenURI(certificateId);
@@ -666,6 +685,9 @@ export class CertificateService {
           issueDate: new Date().toISOString(),
           institutionName: "AvaCertify",
           status: "active",
+          transactionHash: undefined,
+          documentHash: undefined,
+          documentUrl: tokenURI,
           isNFT: true,
         };
       } else {
@@ -690,6 +712,33 @@ export class CertificateService {
     } catch (error: any) {
       console.error("Error getting certificate (read-only):", error);
       throw new Error("Failed to retrieve certificate");
+    }
+  }
+
+  /**
+   * Verify certificate without requiring wallet connection (read-only).
+   */
+  async verifyCertificateReadOnly(certificateId: string, isNFT: boolean = false): Promise<boolean> {
+    if (!this.publicProvider) {
+      throw new Error("Public provider not initialized. Call init() first.");
+    }
+    if (!certificateId?.trim()) {
+      throw new Error("Certificate ID is required");
+    }
+
+    try {
+      if (isNFT) {
+        const nftContract = await this.getReadOnlyNFTContract();
+        const owner = await nftContract.ownerOf(certificateId);
+        return !!owner && owner !== ethers.ZeroAddress;
+      } else {
+        const contract = await this.getReadOnlyContract();
+        const isValid = await contract.verifyCertificate(certificateId);
+        return Boolean(isValid);
+      }
+    } catch (error: any) {
+      console.error("Error verifying certificate (read-only):", error);
+      throw new Error("Failed to verify certificate");
     }
   }
   
