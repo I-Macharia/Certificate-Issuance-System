@@ -63,11 +63,11 @@ export default function Verify() {
 
     setVerificationStatus("loading");
     
-    try {
+        try {
       await certificateService.init();
-      
-      const isValid = await certificateService.verifyCertificate(id, isNFT);
-      const cert = await certificateService.getCertificate(id, isNFT);
+
+      const isValid = await certificateService.verifyCertificateReadOnly(id, isNFT);
+      const cert = await certificateService.getCertificateReadOnly(id, isNFT);
       
       if (cert && isValid) {
         setCertificate({ ...cert, isNFT });

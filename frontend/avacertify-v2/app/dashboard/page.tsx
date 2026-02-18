@@ -74,10 +74,19 @@ export default function Dashboard() {
 
       const allCertificates: Certificate[] = [];
       const BLOCK_RANGE = 2000; // Stay under 2048 limit
-      const MAX_BLOCKS_TO_SCAN = 1000000000; // Scan up to 1000 million blocks back
-
+      const MAX_BLOCKS_TO_SCAN = 50000000; // Scan up to 50 million blocks back (deployed block for first contract)
+      
       const currentBlock = await provider.getBlockNumber();
-      const startBlock = Math.max(0, currentBlock - MAX_BLOCKS_TO_SCAN);
+
+      // Load from cache
+      const lastScannedBlock = parseInt(localStorage.getItem("lastScannedBlock") || "0");
+      const cachedCertificates = JSON.parse(localStorage.getItem("cachedCertificates") || "[]") as Certificate[];
+
+      allCertificates.push(...cachedCertificates);
+
+      const startBlock = lastScannedBlock > 0 
+        ? lastScannedBlock + 1 
+        : Math.max(0, currentBlock - MAX_BLOCKS_TO_SCAN);
 
       console.log(`Scanning from block ${startBlock} to ${currentBlock}`);
       setLoadingProgress(`Scanning blocks ${startBlock} to ${currentBlock}...`);
@@ -170,10 +179,17 @@ export default function Dashboard() {
         console.error("Failed to query NFT certificate events:", error);
       }
 
+      // Merge with cached certificates
+      const allCertificatesWithCache = [...cachedCertificates, ...allCertificates];
+
   // Remove duplicates
       const uniqueCertificates = Array.from(
-        new Map(allCertificates.map(cert => [cert.id, cert])).values()
+        new Map(allCertificatesWithCache.map(cert => [cert.id, cert])).values()
       );
+
+      // Save to cache
+      localStorage.setItem("lastScannedBlock", currentBlock.toString());
+      localStorage.setItem("cachedCertificates", JSON.stringify(uniqueCertificates));
 
       // Sort by issue date (newest first)
       uniqueCertificates.sort((a, b) => {
@@ -210,6 +226,8 @@ export default function Dashboard() {
       setLoadingProgress("");
     }
   }, [toast, checkNetwork]);
+
+
 
   /**
    * Filters certificates based on search query
@@ -264,6 +282,17 @@ export default function Dashboard() {
    */
   const handleRefresh = async () => {
     await fetchCertificatesFromBlockchain();
+  };
+
+    // 3. Add Clear Cache handler:
+
+  const handleClearCache = () => {
+    localStorage.removeItem("lastScannedBlock");
+    localStorage.removeItem("cachedCertificates");
+    toast({
+      title: "Cache Cleared",
+      description: "Next refresh will perform a full rescan",
+    });
   };
 
   /**
@@ -324,6 +353,14 @@ export default function Dashboard() {
                 Refresh
               </>
             )}
+          </Button>
+          <Button 
+              onClick={handleClearCache} 
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+            >
+              Clear Cache
           </Button>
         </div>
 
